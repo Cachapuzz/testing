@@ -10,8 +10,15 @@ docker-compose up -d
 
 After that access Kibana at [http://localhost:5601](http://localhost:5601).
 
+- username: `elastic`
+- password: `elastic123`
+
 2. How to stop
 
 ```bash
 docker compose down -v
 ```
+
+3. Golang logs on Kibana
+
+![Logs](./assets/logs.png)
