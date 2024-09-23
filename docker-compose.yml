@@ -9,7 +9,10 @@ volumes:
     driver: local
   kibanadata:
     driver: local
-
+  filebeat_data:
+    driver: local
+  golang_logs:
+    driver: local
 services:
   setup:
     image: docker.elastic.co/elasticsearch/elasticsearch:${STACK_VERSION}
@@ -223,3 +226,25 @@ services:
       interval: 10s
       timeout: 10s
       retries: 120
+
+  golang_app:
+    build:
+      context: ./golang-app
+    volumes:
+      - golang_logs:/app/logs
+
+  filebeat:
+    image: docker.elastic.co/beats/filebeat:${STACK_VERSION}
+    volumes:
+      - certs:/usr/share/filebeat/certs
+      - filebeat_data:/usr/share/filebeat/data
+      - golang_logs:/var/log/golang
+      - ./filebeat.yml:/usr/share/filebeat/filebeat.yml
+    environment:
+      - ELASTICSEARCH_HOST=https://es01:9200
+      - ELASTICSEARCH_USERNAME=elastic
+      - ELASTICSEARCH_PASSWORD=elastic123
+    depends_on:
+      - es01
+      - kibana
+    command: ["--strict.perms=false"]
