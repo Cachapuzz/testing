@@ -2,7 +2,10 @@ filebeat.inputs:
   - type: log
     enabled: true
     paths:
-      - /var/log/golang/out.log  # Path to the log file inside the container
+      - /var/log/golang/out.log
+    fields:
+      event.dataset: golang.log
+    fields_under_root: true
 
 output.elasticsearch:
   hosts: ["https://es01:9200"]
