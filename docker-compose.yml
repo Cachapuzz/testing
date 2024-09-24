@@ -13,6 +13,11 @@ volumes:
     driver: local
   golang_logs:
     driver: local
+
+networks:
+  prometheus-stuff:
+    driver: bridge
+
 services:
   setup:
     image: docker.elastic.co/elasticsearch/elasticsearch:${STACK_VERSION}
@@ -227,9 +232,9 @@ services:
       timeout: 10s
       retries: 120
 
-  golang_app:
+  golang_app_elk:
     build:
-      context: ./golang-app
+      context: ./golang-app-elk
     volumes:
       - golang_logs:/app/logs
 
@@ -247,4 +252,32 @@ services:
     depends_on:
       - es01
       - kibana
+      - golang_app_elk
     command: ["--strict.perms=false"]
+
+  prometheus:
+    image: prom/prometheus
+    ports:
+      - ${PROMETHEUS_PORT}:9090
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    networks:
+      - prometheus-stuff
+
+  pushgateway:
+    image: prom/pushgateway
+    ports:
+      - ${PUSHGATEWAY_PORT}:9091
+    networks:
+      - prometheus-stuff
+
+  golang_app_prom: 
+    build:
+      context: ./golang-app-prom
+    ports:
+      - ${GOLANG_APP_PORT}:8080
+    depends_on:
+      - prometheus
+      - pushgateway
+    networks:
+      - prometheus-stuff

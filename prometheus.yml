@@ -1,0 +1,13 @@
+global:
+  scrape_interval: 15s # How often to scrape targets
+
+scrape_configs:
+  # Scrape the Prometheus itself
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # Scrape the Pushgateway
+  - job_name: "pushgateway"
+    static_configs:
+      - targets: ["pushgateway:9091"]
