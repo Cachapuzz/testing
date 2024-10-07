@@ -13,6 +13,7 @@ volumes:
     driver: local
   golang_logs:
     driver: local
+  grafana-storage: {}
 
 networks:
   prometheus-stuff:
@@ -271,7 +272,7 @@ services:
     networks:
       - prometheus-stuff
 
-  golang_app_prom: 
+  golang_app_prom:
     build:
       context: ./golang-app-prom
     depends_on:
@@ -279,3 +280,12 @@ services:
       - pushgateway
     networks:
       - prometheus-stuff
+
+  grafana:
+    image: grafana/grafana-enterprise
+    container_name: grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-storage:/var/lib/grafana
