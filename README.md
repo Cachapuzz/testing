@@ -29,3 +29,9 @@ Access Prometheus at [http://localhost:9090](http://localhost:9090).
 
 Access Pushgateway at [http://localhost:9091](http://localhost:9091).
 
+5. Grafana
+
+Access Grafana at [http://localhost:3000](http://localhost:3000).
+
+- username: `admin`
+- password: `admin`
