@@ -23,6 +23,8 @@ docker compose down -v
 
 ![Logs](./assets/logs.png)
 
+3.1 APM test app on [http://localhost:8000](http://localhost:8000)
+
 4. Prometheus
 
 Access Prometheus at [http://localhost:9090](http://localhost:9090).
