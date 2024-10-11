@@ -17,6 +17,7 @@ require (
 )
 
 require (
+	github.com/go-chi/chi/v5 v5.1.0
 	go.elastic.co/apm/module/apmlogrus/v2 v2.6.2
 	golang.org/x/sys v0.15.0 // indirect
 )

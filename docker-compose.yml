@@ -289,3 +289,11 @@ services:
       - "${GRAFANA_PORT}:3000"
     volumes:
       - grafana-storage:/var/lib/grafana
+
+  golang_app_apm:
+    build:
+      context: ./golang-app-apm
+    depends_on:
+      - kibana
+    ports:
+      - ${GOLANG_APP_APM_PORT}:8000
