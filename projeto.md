@@ -10,7 +10,7 @@ Foi-se proposto aos alunos desenvolver serviços piloto para testar e aprofundar
 
 O objetivo desta primeira fase é implementar instrumentação utilizando as ferramentas referidas, o diagrama abaixo explica o processo:
 
-![diagrama]("Untitled-2024-01-29-1911.png")
+![diagrama](./diagrama-projeto.png)
 
 Neste momento o grupo de alunos está a tentar migrar os serviços para o Microsoft Azure, para ficar tudo totalmente na cloud.
 
