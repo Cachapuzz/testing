@@ -1,0 +1,31 @@
+{
+  "ID": "",
+  "IDEvent": 0,
+  "IDDoc": "78e82865-a853-4269-b9e2-e8caab26712a",
+  "Filial": "1000",
+  "Departamento": "00",
+  "NumSeq": "274",
+  "CartaoFisico": "010740CDC9",
+  "CartaoLogico": "0001",
+  "PostoLogico": "GR",
+  "Matricula": "v1",
+  "Produto": "GMBC",
+  "ProdutoDesc": "Gray Masonry Cement Bulk",
+  "ProdutoInterno": 0,
+  "TipoOperacao": "C",
+  "QtdPedida": 1000.0,
+  "Tara": 11000.0,
+  "Bruto": 0.0,
+  "Resposta": 1,
+  "MensagemFinal": {
+    "Titulo": {
+      "Codigo": null,
+      "Texto": [
+        {
+          "Chave": "AR",
+          "Valor": "Operation Completed"
+        }
+      ]
+    }
+  }
+}
