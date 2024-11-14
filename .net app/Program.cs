@@ -1,20 +1,15 @@
-﻿using System;
-using System.Diagnostics;
+﻿using System.Diagnostics;
+using System.Text.Json;
 using Elastic.Apm;
-using Elastic.Apm.Api;
+using Elastic.Apm.DiagnosticSource;
 using Elastic.Apm.NetCoreAll;
 using Elastic.Clients.Elasticsearch;
-using Elastic.Clients.Elasticsearch.Security;
-using Elastic.Transport;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.AspNetCore.Hosting;
-using ApiKey = Elastic.Transport.ApiKey;
 using IHostingEnvironment = Microsoft.AspNetCore.Hosting.IHostingEnvironment;
-using Elasticsearch.Net;
-using Nest;
-using Elastic.Clients.Elasticsearch.Nodes;
+
 
 
 namespace ElasticAgent.NETCore
@@ -24,8 +19,9 @@ namespace ElasticAgent.NETCore
         public int Id { get; set; }
         public string Name { get; set; }
         public string Description { get; set; }
+        public DateTime CreatedAt { get; set; }
     }
-    
+        
     public class Program
     {
         // Host builder method that sets up the Startup class
@@ -64,12 +60,14 @@ namespace ElasticAgent.NETCore
             var host = CreateHostBuilder(args).Build();
             await host.StartAsync();
             
-            string url = "https://192.168.2.16:9200";  // Replace with your actual Elasticsearch URL
-            string apiKey = "N2ZTYjZaSUJxYXVaUHpGd1BXNDQ6TDRLUEVHdS1UX2lJdDcxaGJ0QmpFQQ==";
-            //string apiKey = "Vzdyd2o1SUJTeXYxNm01SGwzV1A6b2VwZUVGeWVTNU9UeTR3R0htUjl5Zw==";
+            string url = "https://192.168.2.16:9200";
+            //string url = "https://localhost:9200";
+            string apiKey = "N2ZTYjZaSUJxYXVaUHpGd1BXNDQ6TDRLUEVHdS1UX2lJdDcxaGJ0QmpFQQ=="; // New API key
+            //string apiKey = "Vzdyd2o1SUJTeXYxNm01SGwzV1A6b2VwZUVGeWVTNU9UeTR3R0htUjl5Zw=="; // Old API Key
+            //string apiKey = "ZU1UWl9KSUJVMmdZR3Q2LXhPTWo6LW51Z21jd05TbkdhZkpEelZXTWdNZw=="; // Pilot App
+            
             string indexName = "um_docs";
             
-
             var mySettings = new ElasticsearchClientSettings(new Uri(url))
                 .ServerCertificateValidationCallback(Elastic.Transport.CertificateValidations.AllowAll)
                 //.CertificateFingerprint("<FINGERPRINT>")
@@ -77,9 +75,13 @@ namespace ElasticAgent.NETCore
                 .EnableTcpKeepAlive(TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1))
                 .RequestTimeout(TimeSpan.FromSeconds(60))
                 .EnableDebugMode()
-                .MaximumRetries(5);
+                .MaximumRetries(5)
+                .DefaultIndex(indexName);
 
             var client = new ElasticsearchClient(mySettings);
+            
+            //Automatic Instrumentation (Redundant because "UseAllElasticApm" already does this) 
+            //Agent.Subscribe(new HttpDiagnosticsSubscriber());
             
             //Fetch info
             var response1 = await client.InfoAsync();
@@ -144,7 +146,6 @@ namespace ElasticAgent.NETCore
 
                 await Task.Delay(5000);
             }
-            
             Console.ReadKey();
         }
 
