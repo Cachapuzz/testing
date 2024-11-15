@@ -34,12 +34,20 @@ app.MapPost("/documents",
     .WithName("Create Document")
     .WithOpenApi();
 
-app.MapGet("/documents/{id}",
-        (string id, ElasticsearchService elasticsearchService) => {
-            return StartTransaction("Fetch Document", "Get Document",
-                () => Handlers.GetDocumentById(id, elasticsearchService.Client));
+app.MapGet("/documents/search",
+        (string field, string value, ElasticsearchService elasticsearchService) => {
+            return StartTransaction("Search Documents By Field", "Search Documents",
+                () => Handlers.GetDocumentsByField(field, value, elasticsearchService.Client));
         })
-    .WithName("Get Document")
+    .WithName("Search Documents By Field")
+    .WithOpenApi();
+
+app.MapDelete("/documents/{id}",
+        (string id, ElasticsearchService elasticsearchService) => {
+            return StartTransaction("Delete Document", "Remove Document",
+                () => Handlers.DeleteDocumentById(id, elasticsearchService.Client));
+        })
+    .WithName("Delete Document")
     .WithOpenApi();
 
 app.Run();
