@@ -34,6 +34,14 @@ app.MapPost("/documents",
     .WithName("Create Document")
     .WithOpenApi();
 
+app.MapGet("/documents/{id}",
+        (string id, ElasticsearchService elasticsearchService) => {
+            return StartTransaction("Fetch Document", "Get Document",
+                () => Handlers.GetDocumentById(id, elasticsearchService.Client));
+        })
+    .WithName("Get Document")
+    .WithOpenApi();
+
 app.Run();
 return;
 

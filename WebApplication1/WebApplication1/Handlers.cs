@@ -28,4 +28,22 @@ public static class Handlers {
 
         return document;
     }
+    
+    public static DocumentModel? GetDocumentById(string id, ElasticsearchClient client) {
+        try {
+            var response = client.Get<DocumentModel>(id, g => g.Index("your-index-name"));
+
+            if (response.IsValidResponse && response.Source != null) {
+                Console.WriteLine($"Fetched document: {response.Source}");
+                return response.Source;
+            }
+
+            Console.WriteLine($"Document with ID {id} not found.");
+            return null;
+        }
+        catch (Exception ex) {
+            Console.WriteLine($"Error fetching document: {ex.Message}");
+            throw;
+        }
+    }
 }
