@@ -37,3 +37,17 @@ Access Grafana at [http://localhost:3000](http://localhost:3000).
 
 - username: `admin`
 - password: `admin`
+
+
+## Portainer 
+
+Access Portainer at [http://localhost:9000](http://localhost:9000).
+
+- username: `admin`
+- password: `superpassword`
+
+## Run Ansible-Playbook
+
+```bash
+sudo ansible-playbook -i inventory.yml ansible-playbook.yml
+```
