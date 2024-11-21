@@ -50,6 +50,14 @@ app.MapDelete("/documents/{id}",
     .WithName("Delete Document")
     .WithOpenApi();
 
+app.MapGet("/fetch-metrics",
+        (ElasticsearchService elasticsearchService) => {
+            return StartTransaction("Fetch Metrics", "Metrics",
+                () => Handlers.HostMetrics(elasticsearchService.Client));
+        })
+    .WithName("Fetch Metrics")
+    .WithOpenApi();
+
 app.Run();
 return;
 

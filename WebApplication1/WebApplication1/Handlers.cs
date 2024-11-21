@@ -1,4 +1,10 @@
+using System.Drawing;
 using Elastic.Clients.Elasticsearch;
+using Elastic.Clients.Elasticsearch.Core.Search;
+using MongoDB.Bson;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using System.Text.Json;
 
 namespace WebApplication1;
 
@@ -28,8 +34,109 @@ public static class Handlers {
 
         return document;
     }
+
+
+    public static object? GetValueFromJsonPath(string json, string path) {
+        try
+        {
+            var jsonDocument = JsonDocument.Parse(json);
+            var elements = path.Split('.'); // Split the dot-separated path
+            JsonElement currentElement = jsonDocument.RootElement;
+
+            foreach (var element in elements)
+            {
+                if (currentElement.TryGetProperty(element, out var nextElement))
+                {
+                    currentElement = nextElement;
+                }
+                else
+                {
+                    // If any part of the path doesn't exist, return null
+                    return null;
+                }
+            }
+
+            // Return the value as the appropriate type
+            return currentElement.ValueKind switch
+            {
+                JsonValueKind.String => currentElement.GetString(),
+                JsonValueKind.Number => currentElement.GetDouble(), // Adjust to GetInt32, GetDecimal, etc., if needed
+                JsonValueKind.True => true,
+                JsonValueKind.False => false,
+                JsonValueKind.Null => null,
+                _ => currentElement.ToString(), // Handle other kinds as string
+            };
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error parsing JSON or retrieving value: {ex.Message}");
+            return null;
+        }
+    }
     
-    public static List<DocumentModel> GetDocumentsByField(string fieldName, string fieldValue, ElasticsearchClient client) {
+    public static async Task<object?> HostMetrics(ElasticsearchClient client) {
+        var response = await client.SearchAsync<MetricDocument>(s => s
+            .Index("metrics-*")
+            .SearchType(SearchType.QueryThenFetch) // Ensure shard-level sorting
+            .From(0)
+            .Size(1)
+            .Sort(ss => ss.Field("@timestamp", s => s.Order(SortOrder.Desc)))
+        );
+
+        var responseCpu = await client.SearchAsync<object>(s => s
+            .Index("metrics-*")
+            .SearchType(SearchType.QueryThenFetch)
+            .From(0)
+            .Query(q => q
+                .Bool(b => b
+                    .Must(mu => mu
+                        .Exists(e => e
+                            .Field("system.cpu.total.norm.pct")
+                        )
+                    )
+                )
+            )
+            .Size(1)
+            .Sort(ss => ss.Field("@timestamp", s => s.Order(SortOrder.Desc)))
+        );
+
+        if (responseCpu.IsValidResponse && responseCpu.Hits.Any()) {
+
+            Console.WriteLine($" type = {responseCpu.Hits.First().Source}");
+            
+            
+            var source = responseCpu.Hits.First().Source.ToString();
+            var jsonDocument = JsonDocument.Parse(source);
+            
+            //get system.cpu.total.norm.pct
+            if (jsonDocument.RootElement.TryGetProperty("system", out var systemElement) &&
+                systemElement.TryGetProperty("cpu", out var cpuElement) &&
+                cpuElement.TryGetProperty("total", out var totalElement) &&
+                totalElement.TryGetProperty("norm", out var normElement) &&
+                normElement.TryGetProperty("pct", out var pctElement))
+            {
+                var pct = pctElement.GetDouble();
+                Console.WriteLine($"CPU Total Norm Pct: {pct}");
+            }
+        }
+
+
+        if (response.IsValidResponse && response.Hits?.Any() == true) {
+            var metrics = response.Hits.First().Source;
+            Console.WriteLine(metrics.ToJson());
+            return new {
+                Timestamp = metrics.Timestamp,
+                CpuUsage = metrics.CpuPct,
+                MemoryUsage = metrics.MemoryPct,
+                HostName = metrics.HostName
+            };
+        }
+
+        return new { Error = "Metrics not found for the specified host." };
+    }
+
+    public static List<DocumentModel> GetDocumentsByField(string fieldName, string fieldValue,
+        ElasticsearchClient client) {
         try {
             var response = client.Search<DocumentModel>(s => s
                 .Query(q => q
@@ -54,7 +161,7 @@ public static class Handlers {
             throw;
         }
     }
-    
+
     public static bool DeleteDocumentById(string id, ElasticsearchClient client) {
         try {
             var response = client.Delete<DocumentModel>(id);
