@@ -6,5 +6,5 @@ all:
 
   vars:
     ansible_architecture: "amd64"
-    ansible_user: "ubuntu_new"
+    ansible_user: "dev"
     portainer_password: "$$2y$$05$$H9AFT5mntIVjdMKSjF6PoedoUz3c8jezMaqeEOuXYh39RQ.hPjJoC"

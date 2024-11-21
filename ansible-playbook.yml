@@ -161,6 +161,47 @@
       register: docker_install_result
       failed_when: docker_install_result is failed
       tags: install
+    
+    - name: Ensure pip is installed
+      apt:
+        name: python3-pip
+        state: present
+      register: pip_installation_result
+      failed_when: pip_installation_result is failed
+      tags: install
+    
+    - name: Verify pip3 installation
+      command: pip3 --version
+      register: pip_version_check
+      failed_when: pip_version_check.rc != 0
+      changed_when: false
+      tags: verify
+
+    - name: Display pip3 version
+      debug:
+        msg: "Installed pip3 version: {{ pip_version_check.stdout }}"
+      tags: verify
+    
+    - name: Install Python Docker SDK
+      pip:
+        name: docker
+        state: present
+        executable: pip3
+      register: pip_install_result
+      failed_when: pip_install_result is failed
+      tags: install
+
+    - name: Verify Python Docker SDK installation
+      shell: python3 -c "import docker; print('Docker SDK is installed')"
+      register: sdk_check
+      failed_when: sdk_check.rc != 0
+      changed_when: false
+      tags: verify
+
+    - name: Display Python Docker SDK verification message
+      debug:
+        msg: "Docker SDK verification output: {{ sdk_check.stdout }}"
+      tags: verify
 
     - name: Verify Docker Verson installed
       command: docker --version
@@ -189,12 +230,33 @@
       group:
         name: docker
         state: present
+      tags: docker-group
 
     - name: Add user to docker group
       user:
         name: "{{ ansible_user }}"
         groups: docker
         append: yes
+      tags: docker-group
+
+    - name: Force group change to take effect immediately
+      shell: newgrp docker || true
+      changed_when: false
+      become: false
+      tags: docker-group
+
+    - name: Test if Docker works without sudo
+      command: docker --version
+      register: docker_version_output
+      failed_when: docker_version_output.rc != 0
+      changed_when: false
+      tags: docker-group
+
+    - name: Display Docker version
+      debug:
+        msg: "{{ docker_version_output.stdout }}"
+      when: docker_version_output.rc == 0
+      tags: docker-group
 
     # Portainer setup
     - name: Create Docker volume for Portainer
@@ -214,7 +276,7 @@
         restart_policy: always
         command: --admin-password '$2y$05$707FmlEulYUb31XiW8gPquHZSp.q1MES/woKdpwlYdzq0q/t8VelO'
         ports:
-          - "8000:8000"
+          - "8001:8001"
           - "9000:9000"
         volumes:
           - /var/run/docker.sock:/var/run/docker.sock
