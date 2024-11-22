@@ -4,7 +4,6 @@
   become: true
   vars:
     grafana_password: "dev.2024.Cachapuz"
-    elastic_fleet_token: "AAEAAWVsYXN0aWMvZmxlZXQtc2VydmVyL3Rva2VuLTE3Mjg5ODkxNzA3NTQ6R1BRVjhOS0pTWW11T3BtcmphQ2pDZw"
     host_ip: "192.168.2.16"
 
   tasks:
@@ -128,6 +127,23 @@
       register: install_ca_certificates
       failed_when: install_ca_certificates is failed
       tags: install
+
+    - name: Install OpenSSL on Debian/Ubuntu
+      apt:
+        name: openssl
+        state: present
+      when: ansible_facts['os_family'] == 'Debian'
+      tags: fleet-server
+
+    - name: Verify OpenSSL Installation
+      command: openssl version
+      register: openssl_version_output
+      tags: fleet-server
+
+    - name: Debug OpenSSL Version
+      debug:
+        msg: "Installed OpenSSL version: {{ openssl_version_output.stdout }}"
+      tags: fleet-server
 
     - name: Create Docker keyrings directory
       file:
@@ -309,4 +325,135 @@
 
     - name: Run docker compose for ELK
       command: docker compose --env-file .env -f docker-compose.yml up -d
+    
+    - name: Wait for ELK containers to start
+      wait_for:
+        timeout: 30
+    
+    - name: Copy certificates from ELK container
+      shell: |
+        docker cp cachapuz-testing-es01-1:/usr/share/elasticsearch/config/certs/ca/ca.crt /usr/local/share/ca-certificates/
+        docker cp cachapuz-testing-es01-1:/usr/share/elasticsearch/config/certs/ca/ca.key /usr/local/share/ca-certificates/
+        update-ca-certificates
+      tags: fleet-server
+
+    - name: Create directory for Fleet Server
+      command: mkdir /home/{{ ansible_user }}/Desktop/testing/fleet-server
+      tags: fleet-server
+
+    - name: Change ownership of fleet-server directory
+      file:
+        path: /home/{{ ansible_user }}/Desktop/testing/fleet-server
+        owner: "{{ ansible_user }}"
+        recurse: yes
+        tags: fleet-server
+    
+    - name: Create Fleet Server Policy
+      shell: |
+        curl -X POST -u elastic:elastic123 -k "http://localhost:5601/api/fleet/agent_policies" \
+        -H "Content-Type: application/json" \
+        -H "kbn-xsrf: true" \
+        -d '{
+          "name": "{{ fleet_server_policy }}",
+          "description": "A policy to configure Fleet Server",
+          "namespace": "default",
+          "is_managed": true,
+          "is_default_fleet_server": true
+        }'
+      register: policy_output
+      changed_when: "'{\"success\":true}' in policy_output.stdout"
+      tags: fleet-server
+  
+    - name: Debug policy output
+      debug:
+        msg: "{{ policy_output.stdout }}"
+      tags: fleet-server
+    
+    - name: Used policy in future task
+      shell: |
+        echo "Using policy: {{fleet_server_policy }}"
+      tags: fleet-server
+  
+    - name: Generate Fleet Server Token
+      shell: |
+        curl -X POST -u elastic:elastic123 -k "https://localhost:9200/_security/service/elastic/fleet-server/credential/token"
+      register: token_output
+      tags: fleet-server
+    
+    - name: Parse token from output
+      set_fact:
+        fleet_token: "{{ token_output.stdout | from_json }}"
+      tags: fleet-server
+    
+    - name: Debug token output
+      debug:
+        msg: "Token output: {{ fleet_token }}"
+      tags: fleet-server
+
+    - name: Extract token value
+      set_fact:
+        fleet_token_value: "{{ token_output.stdout | from_json | json_query('token.value') }}"
+      tags: fleet-server
+
+    - name: Debug token value
+      debug:
+        msg: "Token value: {{ fleet_token_value }}"
+      tags: fleet-server
+
+    - name: Use token value in next task
+      shell: |
+        echo "Using token: {{ fleet_token_value }}"
+      register: token_usage_output
+      tags: fleet-server
+
+    - name: Debug token usage output
+      debug:
+        msg: "{{ token_usage_output.stdout }}"
+      tags: fleet-server
+
+    - name: Download and Extract Fleet Server
+      shell: |
+        curl -L -O https://artifacts.elastic.co/downloads/beats/elastic-agent/elastic-agent-8.15.1-linux-x86_64.tar.gz
+        mv elastic-agent-8.15.1-linux-x86_64.tar.gz /home/{{ ansible_user }}/Desktop/testing/fleet-server 
+        cd /home/{{ ansible_user }}/Desktop/testing/fleet-server/
+        tar xzvf elastic-agent-8.15.1-linux-x86_64.tar.gz
+      tags: fleet-server
+
+    - name: Install Fleet Server #CHANGE Path if needed
+      shell: |
+        /home/{{ ansible_user }}/Desktop/testing/fleet-server/elastic-agent-8.15.1-linux-x86_64/elastic-agent install \
+        --fleet-server-es=https://localhost:9200 \
+        --fleet-server-service-token={{ token_usage_output }} \
+        --fleet-server-policy={{ fleet_server_policy }} \
+        --fleet-server-port=8220 \
+        --force \
+        --non-interactive
+
+      
+      
+    - name: Change ownership of elastic-agent-8.15.1 directory
+      file:
+        path: /home/{{ ansible_user }}/Desktop/testing/fleet-server/elastic-agent-8.15.1-linux-x86_64
+        owner: "{{ ansible_user }}"
+        recurse: yes
+
+    - name: Get Fleet Server Certs
+      shell: |
+        openssl genpkey -algorithm RSA -out /opt/Elastic/Agent/data/elastic-agent-8.15.1-ecab0c/components/certs/fleet-server.key -pkeyopt rsa_keygen_bits:2048
+        openssl req -new -key /opt/Elastic/Agent/data/elastic-agent-8.15.1-ecab0c/components/certs/fleet-server.key -out /opt/Elastic/Agent/data/elastic-agent-8.15.1-ecab0c/components/certs/fleet-server.csr -subj "/C=PT/ST=State/L=City/O=Organization/OU=OrgUnit/CN=fleet-server"
+        openssl x509 -req -in /opt/Elastic/Agent/data/elastic-agent-8.15.1-ecab0c/components/certs/fleet-server.csr -signkey /opt/Elastic/Agent/data/elastic-agent-8.15.1-ecab0c/components/certs/fleet-server.key -out /opt/Elastic/Agent/data/elastic-agent-8.15.1-ecab0c/components/certs/fleet-server.crt
+  
+    # Elastic Agent setup
+    - name: Install Elastic Agent
+      shell: |
+        /home/{{ ansible_user }}/Desktop/testing/fleet-server/elastic-agent-8.15.1-linux-x86_64/elastic-agent enroll --url=https://localhost:8220 \
+        --fleet-server-es=https://localhost:9200 \
+        --fleet-server-service-token={{ token_usage_output }} \
+        --fleet-server-policy=fleet-server-policy \
+        --fleet-server-port=8220 \
+        --certificate-authorities=/usr/local/share/ca-certificates/ca.crt \
+        --fleet-server-es-ca=/usr/local/share/ca-certificates/ca.crt \
+        --fleet-server-cert=/opt/Elastic/Agent/data/elastic-agent-8.15.1-ecab0c/components/certs/fleet-server.crt \
+        --fleet-server-cert-key=/opt/Elastic/Agent/data/elastic-agent-8.15.1-ecab0c/components/certs/fleet-server.key \
+        --force
    
