@@ -7,7 +7,27 @@ namespace WebApplication1;
 public class PrometheusPusher {
     private const string PushgatewayUrl = "http://192.168.2.16:9091/metrics/job/cpu_metrics";
 
-    public async Task PushCpuMetricsAsync(MetricDocument metric) {
+    public async Task PushSingleMetric(string metricName, double value) {
+        var client = new RestClient(PushgatewayUrl);
+        var request = new RestRequest(PushgatewayUrl) {
+            Method = Method.Put
+        };
+ 
+        var metric = $"{metricName} {value}\n";
+        request.AddHeader("Content-Type", "text/plain");
+        request.AddParameter("text/plain", metric, ParameterType.RequestBody);
+        
+        // Send the metrics
+        var response = await client.ExecuteAsync(request);
+        if (response.IsSuccessful) {
+            Console.WriteLine("Metric pushed successfully!");
+        }
+        else {
+            Console.WriteLine($"Failed to push metric: {response.StatusDescription}");
+        }
+    }
+    
+    public async Task PushMetrics(MetricDocument metric) {
         var client = new RestClient(PushgatewayUrl);
         var request = new RestRequest(PushgatewayUrl) {
             Method = Method.Put
@@ -41,12 +61,3 @@ public class PrometheusPusher {
         }
     }
 }
-
-// Example usage
-// public class Program {
-//     public static async Task Main(string[] args) {
-//         //var cpuUsage = 0.037; // Example CPU usage from your Elasticsearch query
-//         //var metricsPusher = new PrometheusPusher();
-//         //await metricsPusher.PushCpuMetricsAsync();
-//     }
-// }

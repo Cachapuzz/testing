@@ -481,8 +481,6 @@ public static class Handlers {
     
     public static async Task<object?> HostMetrics(ElasticsearchClient client) {
         
-        
-        
         //await DeleteAllDocuments(client, "expedition_transactions");
         //await DeleteIndex(client, "expedition_transactions");
         
@@ -499,7 +497,7 @@ public static class Handlers {
         return 0;
     }
 
-    /*private static async Task<object?> GetValueFromJsonPath(string field, int size, TimeSpan timeWindow, string mode,
+    private static async Task<object?> GetMetrics(string field, int size, TimeSpan timeWindow, string mode,
         ElasticsearchClient client) {
         try {
             // Get the start time for the time window
@@ -593,7 +591,7 @@ public static class Handlers {
             Console.WriteLine($"Error parsing JSON or retrieving value: {ex.Message}");
             return null;
         }
-    }*/
+    }
 
     /*public static async Task<object?> HostMetrics(ElasticsearchClient client) {
 
@@ -603,7 +601,7 @@ public static class Handlers {
         var metricDocument = new MetricDocument();
 
         ////////// CPU USAGE (%) //////////
-        var cpuUsage = await GetValueFromJsonPath("system.cpu.total.norm.pct", size, timeSpan, "average", client);
+        var cpuUsage = await GetMetrics("system.cpu.total.norm.pct", size, timeSpan, "average", client);
         if (cpuUsage is double cU) {
             Console.WriteLine($"CPU Total Normal Percentage: {Math.Round(cU, 2)}");
             metricDocument.CpuUsage = cU;
@@ -611,8 +609,8 @@ public static class Handlers {
 
 
         ////////// NORMALIZED LOAD //////////
-        var load1 = await GetValueFromJsonPath("system.load.1", size, timeSpan, "average",client);
-        var cores = await GetValueFromJsonPath("system.load.cores", size, timeSpan,"max", client);
+        var load1 = await GetMetrics("system.load.1", size, timeSpan, "average",client);
+        var cores = await GetMetrics("system.load.cores", size, timeSpan,"max", client);
         if (load1 is double loadValue && cores is double coreValue && coreValue != 0) {
             var normalizedLoad = loadValue / coreValue;
             Console.WriteLine($"Normalized Load: {Math.Round(normalizedLoad, 2)}");
@@ -621,8 +619,8 @@ public static class Handlers {
         else Console.WriteLine("Normalized Load Error: Values are not valid doubles or cores is zero.");
 
         ////////// MEMORY CACHE //////////
-        var usedBytes = await GetValueFromJsonPath("system.memory.used.bytes", size, timeSpan, "average", client);
-        var actualBytes = await GetValueFromJsonPath("system.memory.actual.used.bytes", size, timeSpan, "average", client);
+        var usedBytes = await GetMetrics("system.memory.used.bytes", size, timeSpan, "average", client);
+        var actualBytes = await GetMetrics("system.memory.actual.used.bytes", size, timeSpan, "average", client);
         if (usedBytes is double uB && actualBytes is double aB) {
             var memoryCache = uB - aB;
             Console.WriteLine($"Memory Cache: {Math.Round(memoryCache, 2)}");
@@ -631,8 +629,8 @@ public static class Handlers {
         else Console.WriteLine("Memory Cache Error: Values are not valid doubles.");
 
         ////////// MEMORY FREE //////////
-        var memoryTotal = await GetValueFromJsonPath("system.memory.total", size, timeSpan, "max", client);
-        var memoryActual = await GetValueFromJsonPath("system.memory.actual.used.bytes", size, timeSpan, "average", client);
+        var memoryTotal = await GetMetrics("system.memory.total", size, timeSpan, "max", client);
+        var memoryActual = await GetMetrics("system.memory.actual.used.bytes", size, timeSpan, "average", client);
         if (memoryTotal is double mT && memoryActual is double mA) {
             var memoryFree = mT - mA;
             Console.WriteLine($"Memory Free: {Math.Round(memoryFree, 2)}");
@@ -641,28 +639,28 @@ public static class Handlers {
         else Console.WriteLine("Memory Free Error: Values are not valid doubles.");
 
         ////////// MEMORY TOTAL //////////
-        var sysMemoryTotal = await GetValueFromJsonPath("system.memory.total", size, timeSpan, "average", client);
+        var sysMemoryTotal = await GetMetrics("system.memory.total", size, timeSpan, "average", client);
         if (sysMemoryTotal is double sysTotal) {
             Console.WriteLine($"Memory Total: {Math.Round(sysTotal, 2)}");
             metricDocument.MemoryTotal = sysTotal;
         }
 
         ////////// MEMORY USAGE (%) //////////
-        var memoryUsage = await GetValueFromJsonPath("system.memory.actual.used.pct", size, timeSpan, "average", client);
+        var memoryUsage = await GetMetrics("system.memory.actual.used.pct", size, timeSpan, "average", client);
         if (memoryUsage is double mU) {
             Console.WriteLine($"Memory Usage (%): {Math.Round(mU, 2)}");
             metricDocument.MemoryUsage = mU;
         }
 
         ////////// MEMORY USED //////////
-        var memoryUsed = await GetValueFromJsonPath("system.memory.actual.used.bytes", size, timeSpan, "average", client);
+        var memoryUsed = await GetMetrics("system.memory.actual.used.bytes", size, timeSpan, "average", client);
         if (memoryUsed is double mUsed) {
             Console.WriteLine($"Memory Used: {Math.Round(mUsed, 2)}");
             metricDocument.MemoryUsed = mUsed;
         }
 
         ////////// NETWORK INBOUND (RX) //////////
-        var netIn = await GetValueFromJsonPath("host.network.ingress.bytes", size, timeSpan, "sum", client);
+        var netIn = await GetMetrics("host.network.ingress.bytes", size, timeSpan, "sum", client);
         if(netIn is double nI){
             var networkInbound = nI * 8 / 100;
             Console.WriteLine($"Network Inbound (RX): {Math.Round(networkInbound, 2)}");
@@ -670,7 +668,7 @@ public static class Handlers {
         }
 
         ////////// NETWORK OUTBOUND (TX) //////////
-        var netOut = await GetValueFromJsonPath("host.network.egress.bytes", size, timeSpan, "sum", client);
+        var netOut = await GetMetrics("host.network.egress.bytes", size, timeSpan, "sum", client);
         if(netOut is double nO){
             var networkOutbound = nO * 8 / 100;
             Console.WriteLine($"Network Outbound (TX): {Math.Round(networkOutbound, 2)}");
@@ -680,17 +678,17 @@ public static class Handlers {
         ////////// DISK LATENCY //////////
         // Average(Read + Write Time)
         var diskTimeAvg = 0.0;
-        var diskRead = await GetValueFromJsonPath("system.diskio.read.time", size, timeSpan, "sum&count", client);
-        var diskWrite = await GetValueFromJsonPath("system.diskio.write.time", size, timeSpan, "sum&count", client);
+        var diskRead = await GetMetrics("system.diskio.read.time", size, timeSpan, "sum&count", client);
+        var diskWrite = await GetMetrics("system.diskio.write.time", size, timeSpan, "sum&count", client);
         if (diskRead is ValueTuple<double, int> dR && diskWrite is ValueTuple<double, int> dW) {
             diskTimeAvg = (dR.Item1 + dW.Item1) / (dR.Item2 + dW.Item2);
         }
 
         // Read Count (in specified time span)
-        var readCount = await GetValueFromJsonPath("system.diskio.read.count", size, timeSpan, "sum", client);
+        var readCount = await GetMetrics("system.diskio.read.count", size, timeSpan, "sum", client);
 
         // Write Count (in specified time span)
-        var writeCount = await GetValueFromJsonPath("system.diskio.write.count", size, timeSpan, "sum", client);
+        var writeCount = await GetMetrics("system.diskio.write.count", size, timeSpan, "sum", client);
 
         if (readCount is double rC && writeCount is double wC) {
              var diskLatency = diskTimeAvg / (rC + wC);
@@ -705,7 +703,7 @@ public static class Handlers {
         ////////// DISK READ THROUGHPUT ////////// (no idea how to get this yet)
 
         ////////// DISK USAGE - AVAILABLE (%) //////////
-        var diskUsage = GetValueFromJsonPath("system.filesystem.used.pct", size, timeSpan, "average", client).Result;
+        var diskUsage = GetMetrics("system.filesystem.used.pct", size, timeSpan, "average", client).Result;
         if (diskUsage is double dU) {
             var diskAvailable = 1 - dU;
             Console.WriteLine($"DISK USAGE - AVAILABLE (%): {Math.Round(diskAvailable, 2)}");
@@ -713,7 +711,7 @@ public static class Handlers {
         }
 
         ////////// DISK USAGE - MAX (%) //////////
-        var maxDisk = await GetValueFromJsonPath("system.filesystem.used.pct", size, timeSpan, "max", client);
+        var maxDisk = await GetMetrics("system.filesystem.used.pct", size, timeSpan, "max", client);
         if (maxDisk is double mD) {
             Console.WriteLine($"DISK USAGE - MAX (%): {Math.Round(mD, 2)}");
             metricDocument.DiskUsageMax = mD;
@@ -722,7 +720,7 @@ public static class Handlers {
 
 
         var pusher = new PrometheusPusher();
-        await pusher.PushCpuMetricsAsync(metricDocument);
+        await pusher.PushMetrics(metricDocument);
 
 
         return new { Error = "Metrics not found for the specified host." };
