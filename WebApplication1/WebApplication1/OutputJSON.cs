@@ -1,12 +1,10 @@
 namespace WebApplication1;
-using System.Collections.Generic;
 
-public class OutputJson
-{
+public class OutputJson {
     public string? ID { get; set; }
     public int? IDEvent { get; set; }
     public bool? ModoPesDuplaFase { get; set; }
-    public string? IDDoc { get; set; } 
+    public string? IDDoc { get; set; }
     public string? Filial { get; set; }
     public string? Departamento { get; set; }
     public string? NumSeq { get; set; }

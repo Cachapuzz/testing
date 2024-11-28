@@ -1,7 +1,8 @@
 namespace WebApplication1;
+
 using System.Collections.Generic;
 
-public class InputJson{
+public class InputJson {
     public string? ID { get; set; }
     public int? IDEvent { get; set; }
     public double? ModoPesDuplaFaseP1 { get; set; }

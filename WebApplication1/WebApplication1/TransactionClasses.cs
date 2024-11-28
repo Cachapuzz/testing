@@ -3,7 +3,6 @@ using Elastic.Clients.Elasticsearch;
 namespace WebApplication1;
 
 public class ExpeditionTransaction {
-    
     public DateTime _timestamp { get; set; }
     public EventInfo? Event { get; set; }
     public string? HostName { get; set; }
@@ -28,6 +27,6 @@ public class Span {
 public class Transaction {
     public string? ID { get; set; }
     public string? Name { get; set; }
-    
+
     public int? Duration { get; set; }
 }
