@@ -12,7 +12,7 @@ class Program {
             return;
         }
 
-        await Handlers.HostMetrics(elasticsearchService.Client);
+        await Handlers.Start(elasticsearchService.Client);
 
         Console.WriteLine("Operation completed successfully.");
     }

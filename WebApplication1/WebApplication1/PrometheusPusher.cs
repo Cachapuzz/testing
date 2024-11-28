@@ -7,13 +7,14 @@ namespace WebApplication1;
 public class PrometheusPusher {
     private const string PushgatewayUrl = "http://192.168.2.16:9091/metrics/job/cpu_metrics";
 
-    public async Task PushSingleMetric(string metricName, double value) {
+    public async Task PushSingleMetric(string metricName, string value, string transactionId, string transactionName) {
         var client = new RestClient(PushgatewayUrl);
         var request = new RestRequest(PushgatewayUrl) {
             Method = Method.Put
         };
  
-        var metric = $"{metricName} {value}\n";
+        var labels = $"transaction_id=\"{transactionId}\",transaction_name=\"{transactionName}\"";
+        var metric = $"{metricName}{{{labels}}} {value}\n";
         request.AddHeader("Content-Type", "text/plain");
         request.AddParameter("text/plain", metric, ParameterType.RequestBody);
         
