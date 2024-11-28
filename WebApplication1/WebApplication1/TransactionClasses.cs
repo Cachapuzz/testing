@@ -4,7 +4,7 @@ namespace WebApplication1;
 
 public class ExpeditionTransaction {
     
-    public DateTime? _timestamp { get; set; }
+    public DateTime _timestamp { get; set; }
     public EventInfo? Event { get; set; }
     public string? HostName { get; set; }
     public Span? Span { get; set; }
@@ -14,7 +14,7 @@ public class ExpeditionTransaction {
 }
 
 public class EventInfo {
-    public DateTime? IngestedAt { get; set; }
+    public DateTime IngestedAt { get; set; }
     public string? Outcome { get; set; }
 }
 
