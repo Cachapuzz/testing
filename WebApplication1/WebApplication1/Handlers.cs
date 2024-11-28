@@ -5,31 +5,7 @@ using SortOrder = Elastic.Clients.Elasticsearch.SortOrder;
 namespace WebApplication1;
 
 public static class Handlers {
-    public static string HelloElastic() {
-        Console.WriteLine("Hello Elastic!");
-
-        return "Hello Elastic!";
-    }
-
-    public static DocumentModel? CreateDocument(string name, string description, ElasticsearchClient client) {
-        var document = new DocumentModel() {
-            Id = Guid.NewGuid().ToString(),
-            Name = name,
-            Description = description,
-            CreatedAt = DateTime.UtcNow
-        };
-
-        var responseInsert = client.IndexAsync(document, i => i
-            .Pipeline("Added timestamp")
-            .Id(document.Id)
-        );
-
-        responseInsert.Wait();
-        Console.WriteLine("Inserted document {0}", responseInsert.Result);
-
-        return document;
-    }
-
+    
     private static async Task CreateIndex(ElasticsearchClient client) {
         // Check if the index exists
         var indexResponse = await client.Indices.ExistsAsync("expedition_transactions");
@@ -216,7 +192,7 @@ public static class Handlers {
     }
 
     private static async Task SendToElastic(string json, InputJson inputDocument, OutputJson outputDocument,
-        ElasticsearchClient client, string newindex) {
+        ElasticsearchClient client, string newindex, bool isItNew) {
         var eventTime = SearchJsonField(json, "event.ingested");
         var hostName = SearchJsonField(json, "host.name");
         var spanId = SearchJsonField(json, "span.id");
@@ -254,6 +230,15 @@ public static class Handlers {
 
         Console.WriteLine($"DateTime after conversion: {parsedDateTime}");
 
+        if (isItNew) {
+            var transactionPusher = new PrometheusPusher();
+            await transactionPusher.PushSingleMetric("transaction_id", transactionId);
+            await transactionPusher.PushSingleMetric("transaction_name", transactionName);
+            await transactionPusher.PushSingleMetric("transaction_duration", transactionDuration);
+            await transactionPusher.PushSingleMetric("transaction_span_started", spanStarted);
+            await transactionPusher.PushSingleMetric("transaction_span_dropped", spanDropped);
+        }
+
         var transaction = new ExpeditionTransaction {
             _timestamp = parsedDateTime,
             Event = new EventInfo {
@@ -289,7 +274,7 @@ public static class Handlers {
         }
     }
 
-    private static async Task TreatJsonAndIngest(ElasticsearchClient client, String json, String index) {
+    private static async Task TreatJsonAndIngest(ElasticsearchClient client, String json, String index, bool isItNew) {
         // Get the input/output JSONs
         var inputJson = SearchJsonField(json, "labels.inputJSON");
         var outputJson = SearchJsonField(json, "labels.outputJSON");
@@ -304,7 +289,7 @@ public static class Handlers {
 
         //Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(inputDocument));
         //Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(outputDocument));
-        await SendToElastic(json, inputDocument, outputDocument, client, index);
+        await SendToElastic(json, inputDocument, outputDocument, client, index, isItNew);
     }
 
     private static async Task PopulateIndexFrom(ElasticsearchClient client, string newindex, string sourceindex) {
@@ -369,7 +354,7 @@ public static class Handlers {
                 }
 
                 ///// JSON /////
-                await TreatJsonAndIngest(client, json, newindex);
+                await TreatJsonAndIngest(client, json, newindex, false);
             }
         }
         catch (Exception ex) {
@@ -377,8 +362,7 @@ public static class Handlers {
         }
     }
 
-    private static async Task<DateTime?>
-        GetLastDocumentTime(ElasticsearchClient client, string dateField, string index) {
+    private static async Task<DateTime?> GetLastDocumentTime(ElasticsearchClient client, string dateField, string index) {
         var lastIndexedDocResponse = await client.SearchAsync<ExpeditionTransaction>(s => s
             .Index(index)
             .Sort(ss => ss.Field(dateField, s => s.Order(SortOrder.Desc)))
@@ -465,7 +449,7 @@ public static class Handlers {
                 continue;
             }
 
-            TreatJsonAndIngest(client, json, newindex);
+            TreatJsonAndIngest(client, json, newindex, true);
         }
     }
 
@@ -476,9 +460,16 @@ public static class Handlers {
 
         await CreateIndex(client);
         await PopulateIndexFrom(client, "expedition_transactions", ".ds-traces-apm-default-2024.11.14-000002");
-
+        
+        _ = Task.Run(async () => {
+            while (true) {
+                await ServerMetrics(client);
+                await Task.Delay(60000); // Run every minute
+            }
+        });
+        
         while (true) {
-            await Task.Delay(5000);
+            await Task.Delay(10000);
             var lastTimestamp = GetLastDocumentTime(client, "_timestamp", "expedition_transactions").Result;
             if (lastTimestamp == null) continue;
             await GetNewerDocumentsFrom(client, lastTimestamp.Value, "expedition_transactions",
@@ -557,18 +548,13 @@ public static class Handlers {
                     if (currentElement.GetDouble() > max) max = currentElement.GetDouble();
 
                 }
-
-
             }
 
             // Return the average if there were any valid documents
             if (count > 0) {
                 if (mode == "sum&count") return (total, count);
-
                 if (mode == "average") return total / count;
-
                 if (mode == "max") return max;
-
                 if (mode == "sum" ) return total;
 
                 Console.WriteLine("Incompatible mode");
@@ -584,9 +570,9 @@ public static class Handlers {
         }
     }
 
-    /*public static async Task<object?> HostMetrics(ElasticsearchClient client) {
+    public static async Task ServerMetrics(ElasticsearchClient client) {
 
-        var timeSpan = TimeSpan.FromHours(1);
+        var timeSpan = TimeSpan.FromMinutes(5);
         var size = 100;
 
         var metricDocument = new MetricDocument();
@@ -691,7 +677,7 @@ public static class Handlers {
         //Console.WriteLine($"readCount: {readCount}");
         //Console.WriteLine($"writeCount: {writeCount}");
 
-        ////////// DISK READ THROUGHPUT ////////// (no idea how to get this yet)
+        ////////// DISK READ THROUGHPUT ////////// (Not sure how to get this yet. Not a priority right now)
 
         ////////// DISK USAGE - AVAILABLE (%) //////////
         var diskUsage = GetMetrics("system.filesystem.used.pct", size, timeSpan, "average", client).Result;
@@ -707,58 +693,10 @@ public static class Handlers {
             Console.WriteLine($"DISK USAGE - MAX (%): {Math.Round(mD, 2)}");
             metricDocument.DiskUsageMax = mD;
         }
+        
+        var performancePusher = new PrometheusPusher();
+        await performancePusher.PushMetrics(metricDocument);
 
-
-
-        var pusher = new PrometheusPusher();
-        await pusher.PushMetrics(metricDocument);
-
-
-        return new { Error = "Metrics not found for the specified host." };
-    }*/
-
-    public static List<DocumentModel> GetDocumentsByField(string fieldName, string fieldValue,
-        ElasticsearchClient client) {
-        try {
-            var response = client.Search<DocumentModel>(s => s
-                .Query(q => q
-                    .Match(m => m
-                            .Field(fieldName) // Dynamically set the field to search
-                            .Query(fieldValue) // Value to match
-                    )
-                )
-            );
-
-            if (response.IsValidResponse && response.Hits.Any()) {
-                var documents = response.Hits.Select(hit => hit.Source).ToList();
-                Console.WriteLine($"Fetched {documents.Count} documents where '{fieldName}' equals '{fieldValue}'.");
-                return documents!;
-            }
-
-            Console.WriteLine($"No documents found where '{fieldName}' equals '{fieldValue}'.");
-            return new List<DocumentModel>();
-        }
-        catch (Exception ex) {
-            Console.WriteLine($"Error fetching documents by field: {ex.Message}");
-            throw;
-        }
-    }
-
-    public static bool DeleteDocumentById(string id, ElasticsearchClient client) {
-        try {
-            var response = client.Delete<DocumentModel>(id);
-
-            if (response.IsValidResponse) {
-                Console.WriteLine($"Deleted document with ID: {id}");
-                return true;
-            }
-
-            Console.WriteLine($"Failed to delete document with ID {id}. Status: {response.Result}");
-            return false;
-        }
-        catch (Exception ex) {
-            Console.WriteLine($"Error deleting document: {ex.Message}");
-            throw;
-        }
+        return;
     }
 }
