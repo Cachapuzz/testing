@@ -1,14 +1,5 @@
-using System.Drawing;
-using System.Text;
 using Elastic.Clients.Elasticsearch;
-using Elastic.Clients.Elasticsearch.Core.Search;
-using MongoDB.Bson;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using System.Text.Json;
-using Elastic.Clients.Elasticsearch.QueryDsl;
-using MongoDB.Bson.IO;
-using Nest;
 using SortOrder = Elastic.Clients.Elasticsearch.SortOrder;
 
 namespace WebApplication1;
@@ -43,11 +34,11 @@ public static class Handlers {
         // Check if the index exists
         var indexResponse = await client.Indices.ExistsAsync("expedition_transactions");
 
-        if (indexResponse.IsValidResponse){
+        if (indexResponse.IsValidResponse) {
             Console.WriteLine($"Index \"expedition_transactions\" already exists.");
             return;
         }
-        
+
         // Create the index if it doesn't exist
         try {
             var createIndexResponse = await client.Indices.CreateAsync("expedition_transactions", c => c
@@ -134,13 +125,12 @@ public static class Handlers {
                     )
                 )
             );
-            if (createIndexResponse.IsValidResponse){
+            if (createIndexResponse.IsValidResponse) {
                 Console.WriteLine($"Index \"expedition_transactions\" created successfully!");
             }
             else Console.WriteLine($"Error when trying to create \"expedition_transactions\"");
         }
-        catch (Exception ex)
-        {
+        catch (Exception ex) {
             Console.WriteLine($"An error occurred: {ex.Message}");
             Console.WriteLine($"Stack trace: {ex.StackTrace}");
         }
@@ -150,21 +140,19 @@ public static class Handlers {
         string resultJson = rawJson;
 
         // In labels.outputJSON the problematic field is "MensagemFinal" and it is always present so we truncate the json when we find it
-        if(field == "labels.outputJSON" && rawJson.Contains("MensagemFinal")) {
-            
+        if (field == "labels.outputJSON" && rawJson.Contains("MensagemFinal")) {
             int startIndex = rawJson.IndexOf(",\"MensagemFinal", StringComparison.Ordinal);
             resultJson = rawJson.Substring(0, startIndex);
             resultJson += "}";
-            
+
             return resultJson;
         }
-        
-        
+
+
         // In labels.inputJSON the problematic field is "DadosIntroduzidos" but only when it has data
         // To safely remove it we truncate the whole string when the next field "PesoObtidoAutomatico" isn't found and remove only the "DadosIntroduzidos" field otherwise
         if (field == "labels.inputJSON" && rawJson.Contains("DadosIntroduzidos")) {
             if (rawJson.Contains("PesoObtidoAutomatico")) {
-                
                 int startIndex = rawJson.IndexOf("DadosIntroduzidos", StringComparison.Ordinal);
                 int endIndex = rawJson.IndexOf("PesoObtidoAutomatico", startIndex, StringComparison.Ordinal);
                 if (startIndex != -1 && endIndex != -1) {
@@ -175,10 +163,10 @@ public static class Handlers {
             }
             else {
                 int startIndex = rawJson.IndexOf(",\"DadosIntroduzidos", StringComparison.Ordinal);
-                
+
                 resultJson = rawJson.Substring(0, startIndex);
                 resultJson += "}";
-                
+
                 return resultJson;
             }
         }
@@ -187,11 +175,10 @@ public static class Handlers {
     }
 
     private static string SearchJsonField(string json, string field) {
-        
         var jsonDocument = JsonDocument.Parse(json);
         var elements = field.Split('.');
         JsonElement currentElement = jsonDocument.RootElement;
-        
+
         // Parse JSON for the requested field
         foreach (var element in elements) {
             if (currentElement.TryGetProperty(element, out var nextElement)) {
@@ -201,12 +188,12 @@ public static class Handlers {
                 break;
             }
         }
+
         return currentElement.ToString();
     }
-    
-    public static T GetDocumentFromJson<T>(string jsonString) where T : class{
-        
-        if (string.IsNullOrWhiteSpace(jsonString)){
+
+    public static T GetDocumentFromJson<T>(string jsonString) where T : class {
+        if (string.IsNullOrWhiteSpace(jsonString)) {
             throw new ArgumentException("Input JSON string cannot be null or empty.");
         }
 
@@ -219,16 +206,17 @@ public static class Handlers {
             if (document == null) {
                 throw new InvalidOperationException("Failed to deserialize JSON to Document.");
             }
+
             return document;
         }
-        catch (System.Text.Json.JsonException ex)
-        {
+        catch (System.Text.Json.JsonException ex) {
             Console.WriteLine($"Error parsing JSON: {ex.Message}");
             throw;
         }
     }
 
-    private static async Task SendToElastic(string json, InputJson inputDocument, OutputJson outputDocument, ElasticsearchClient client, string newindex) {
+    private static async Task SendToElastic(string json, InputJson inputDocument, OutputJson outputDocument,
+        ElasticsearchClient client, string newindex) {
         var eventTime = SearchJsonField(json, "event.ingested");
         var hostName = SearchJsonField(json, "host.name");
         var spanId = SearchJsonField(json, "span.id");
@@ -239,16 +227,16 @@ public static class Handlers {
         var spanDropped = SearchJsonField(json, "transaction.span_count.dropped");
         var spanStarted = SearchJsonField(json, "transaction.span_count.started");
         var timestamp = SearchJsonField(json, "@timestamp");
-         
+
         //Parse non-string values to their respective types
         DateTime parsedEventTime = DateTime.MinValue;
-        if (DateTime.TryParse(eventTime, out var parsedDate))  parsedEventTime = parsedDate;
+        if (DateTime.TryParse(eventTime, out var parsedDate)) parsedEventTime = parsedDate;
         else Console.WriteLine("Invalid date format for eventTime.");
- 
+
         int? transactionDurationParsed = null;
         if (int.TryParse(transactionDuration, out var tdurationValue)) transactionDurationParsed = tdurationValue;
         else Console.WriteLine("Invalid number format for spanDropped.");
- 
+
         int? parsedSpanStarted = null;
         if (int.TryParse(spanStarted, out var startedValue)) parsedSpanStarted = startedValue;
         else Console.WriteLine("Invalid number format for spanStarted.");
@@ -256,33 +244,29 @@ public static class Handlers {
         int? parsedSpanDropped = null;
         if (int.TryParse(spanDropped, out var droppedValue)) parsedSpanDropped = droppedValue;
         else Console.WriteLine("Invalid number format for spanDropped.");
-        
+
         Console.WriteLine($"DateTime before conversion: {timestamp}");
-        
-         // Parse as DateTime
-         if (!DateTime.TryParse(timestamp, out var parsedDateTime)) {
-             Console.WriteLine("Error parsing");
-         }
-         
-         Console.WriteLine($"DateTime after conversion: {parsedDateTime}");
-         
-        var transaction = new ExpeditionTransaction
-        {
+
+        // Parse as DateTime
+        if (!DateTime.TryParse(timestamp, out var parsedDateTime)) {
+            Console.WriteLine("Error parsing");
+        }
+
+        Console.WriteLine($"DateTime after conversion: {parsedDateTime}");
+
+        var transaction = new ExpeditionTransaction {
             _timestamp = parsedDateTime,
-            Event = new EventInfo
-            {
+            Event = new EventInfo {
                 IngestedAt = parsedEventTime,
                 Outcome = eventOutcome
             },
             HostName = hostName,
-            Span = new Span
-            {
+            Span = new Span {
                 ID = spanId,
                 Started = parsedSpanStarted,
                 Dropped = parsedSpanDropped
             },
-            Transaction = new Transaction
-            {
+            Transaction = new Transaction {
                 ID = transactionId,
                 Name = transactionName,
                 Duration = transactionDurationParsed
@@ -300,29 +284,29 @@ public static class Handlers {
             else
                 Console.WriteLine($"Failed to index document: {responseInsert.ElasticsearchServerError?.Error.Reason}");
         }
-        catch(Exception ex) {
+        catch (Exception ex) {
             Console.WriteLine($"Exception while indexing document: {ex.Message}");
         }
     }
 
     private static async Task TreatJsonAndIngest(ElasticsearchClient client, String json, String index) {
-        
         // Get the input/output JSONs
-        var inputJson = SearchJsonField(json,"labels.inputJSON");
-        var outputJson = SearchJsonField(json,"labels.outputJSON");
-                
+        var inputJson = SearchJsonField(json, "labels.inputJSON");
+        var outputJson = SearchJsonField(json, "labels.outputJSON");
+
         // Fix the JSONs
         var fixedInputJson = FixJson(inputJson, "labels.inputJSON");
         var fixedOutputJson = FixJson(outputJson, "labels.outputJSON");
-                
+
         // Parse and process fixed JSON if it's valid
         InputJson inputDocument = GetDocumentFromJson<InputJson>(fixedInputJson);
         OutputJson outputDocument = GetDocumentFromJson<OutputJson>(fixedOutputJson);
-                
+
         //Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(inputDocument));
         //Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(outputDocument));
         await SendToElastic(json, inputDocument, outputDocument, client, index);
     }
+
     private static async Task PopulateIndexFrom(ElasticsearchClient client, string newindex, string sourceindex) {
         try {
             var response = await client.SearchAsync<dynamic>(s => s
@@ -332,10 +316,10 @@ public static class Handlers {
                 .Query(q => q
                     .Bool(b => b
                         .Must(m => m
-                            .Match(mm => mm
-                                .Field("service.name")
-                                .Query("ExpeditionService")
-                            ),
+                                .Match(mm => mm
+                                    .Field("service.name")
+                                    .Query("ExpeditionService")
+                                ),
                             m => m.Exists(e => e.Field("labels.inputJSON")),
                             m => m.Exists(e => e.Field("labels.outputJSON"))
                         )
@@ -344,7 +328,7 @@ public static class Handlers {
                 .Size(10000)
                 .Sort(ss => ss.Field("@timestamp", s => s.Order(SortOrder.Desc)))
             );
-            
+
             // Source Index Null check
             if (!response.IsValidResponse || !response.Hits.Any()) {
                 Console.WriteLine($"No valid hits found for {sourceindex}!");
@@ -357,7 +341,7 @@ public static class Handlers {
                     .Bool(b => b
                         .Must(m => m
                             .Exists(e => e.Field("transaction.id")))))
-                    .Size(10000) 
+                .Size(10000)
             );
 
             // New Index Null check
@@ -365,25 +349,25 @@ public static class Handlers {
                 Console.WriteLine($"No valid hits found for {newindex}!");
                 return;
             }
-            
+
             var existingIds = existingIdsResponse.Hits
                 .Select(hit => hit.Source?.GetProperty("transaction").GetProperty("id").ToString())
                 .ToHashSet();
-            
+
             // For each document received
             foreach (var hit in response.Hits) {
                 var json = hit.Source?.ToString();
                 if (json == null) {
                     continue;
                 }
-                
+
                 // Check if transaction is already in index
                 var transactionId = SearchJsonField(json, "transaction.id");
                 if (existingIds.Contains(transactionId)) {
                     //Console.WriteLine($"Found transaction with id: {transactionId}. Skipping...");
                     continue;
                 }
-                
+
                 ///// JSON /////
                 await TreatJsonAndIngest(client, json, newindex);
             }
@@ -393,63 +377,68 @@ public static class Handlers {
         }
     }
 
-    private static async Task<DateTime?> GetLastDocumentTime(ElasticsearchClient client, string dateField, string index) {
+    private static async Task<DateTime?>
+        GetLastDocumentTime(ElasticsearchClient client, string dateField, string index) {
         var lastIndexedDocResponse = await client.SearchAsync<ExpeditionTransaction>(s => s
             .Index(index)
             .Sort(ss => ss.Field(dateField, s => s.Order(SortOrder.Desc)))
             .Size(1)
         );
-        
+
         if (!lastIndexedDocResponse.IsValidResponse) {
-            Console.WriteLine($"Failed to fetch last document: {lastIndexedDocResponse.ElasticsearchServerError?.Error.Reason}");
+            Console.WriteLine(
+                $"Failed to fetch last document: {lastIndexedDocResponse.ElasticsearchServerError?.Error.Reason}");
             return null;
         }
-        
-        if (lastIndexedDocResponse?.Hits is null || !lastIndexedDocResponse.Hits.Any()){
+
+        if (lastIndexedDocResponse?.Hits is null || !lastIndexedDocResponse.Hits.Any()) {
             Console.WriteLine("No documents found in the search.");
             return null;
         }
+
         var lastTimestamp = lastIndexedDocResponse.Hits.FirstOrDefault()?.Source?._timestamp;
-        
+
         return lastTimestamp;
     }
+
     private static async Task DeleteAllDocuments(ElasticsearchClient client, string index) {
-        
-        var deleteResponse1 = await client.DeleteByQueryAsync<object>(index , d => d
+        var deleteResponse1 = await client.DeleteByQueryAsync<object>(index, d => d
             .Query(q => q
                 .MatchAll(m => m.QueryName("match_all_documents"))
             )
         );
-        if (deleteResponse1.IsValidResponse) Console.WriteLine($"Successfully deleted all documents from expedition_transactions.");
+        if (deleteResponse1.IsValidResponse)
+            Console.WriteLine($"Successfully deleted all documents from expedition_transactions.");
         else Console.WriteLine($"Failed to delete documents: {deleteResponse1.ElasticsearchServerError?.Error.Reason}");
-        
     }
-    
+
     private static async Task DeleteIndex(ElasticsearchClient client, string index) {
-        
         var deleteResponse2 = await client.Indices.DeleteAsync(index);
         if (deleteResponse2.IsValidResponse) Console.WriteLine($"Successfully deleted index expedition_transactions.");
-        else Console.WriteLine($"Failed to delete index expedition_transactions: {deleteResponse2.ElasticsearchServerError?.Error.Reason}");
+        else
+            Console.WriteLine(
+                $"Failed to delete index expedition_transactions: {deleteResponse2.ElasticsearchServerError?.Error.Reason}");
     }
-    
-    private static async Task GetNewerDocumentsFrom(ElasticsearchClient client, DateTime lastTimestamp, string newindex, string sourceindex){
+
+    private static async Task GetNewerDocumentsFrom(ElasticsearchClient client, DateTime lastTimestamp, string newindex,
+        string sourceindex) {
         var formattedLastTimestamp = lastTimestamp.ToUniversalTime().ToString("o");
         var searchResponse = await client.SearchAsync<dynamic>(s => s
             .Index(sourceindex)
             .Query(q => q
                 .Bool(b => b
                     .Must(m => m
-                        .Range(r => r
-                            .DateRange(dr => dr
-                                .Field("@timestamp")
-                                .Gt(lastTimestamp)
-                            )
-                        ),
+                            .Range(r => r
+                                .DateRange(dr => dr
+                                    .Field("@timestamp")
+                                    .Gt(lastTimestamp)
+                                )
+                            ),
                         m => m
-                        .Match(mm => mm
-                            .Field("service.name")
-                            .Query("ExpeditionService")
-                        ),
+                            .Match(mm => mm
+                                .Field("service.name")
+                                .Query("ExpeditionService")
+                            ),
                         m => m.Exists(e => e.Field("labels.inputJSON")),
                         m => m.Exists(e => e.Field("labels.outputJSON"))
                     )
@@ -459,15 +448,17 @@ public static class Handlers {
         );
 
         if (!searchResponse.IsValidResponse) {
-            Console.WriteLine($"Failed to fetch new documents: {searchResponse.ElasticsearchServerError?.Error.Reason}");
+            Console.WriteLine(
+                $"Failed to fetch new documents: {searchResponse.ElasticsearchServerError?.Error.Reason}");
             return;
         }
+
         if (!searchResponse.Hits.Any()) {
             Console.WriteLine($"No new documents found");
             return;
         }
-        
-        
+
+
         foreach (var hit in searchResponse.Hits) {
             var json = hit.Source?.ToString();
             if (json == null) {
@@ -476,24 +467,24 @@ public static class Handlers {
 
             TreatJsonAndIngest(client, json, newindex);
         }
-        
     }
-    
+
     public static async Task<object?> HostMetrics(ElasticsearchClient client) {
         
         //await DeleteAllDocuments(client, "expedition_transactions");
         //await DeleteIndex(client, "expedition_transactions");
-        
+
         await CreateIndex(client);
         await PopulateIndexFrom(client, "expedition_transactions", ".ds-traces-apm-default-2024.11.14-000002");
-        
+
         while (true) {
             await Task.Delay(5000);
             var lastTimestamp = GetLastDocumentTime(client, "_timestamp", "expedition_transactions").Result;
             if (lastTimestamp == null) continue;
-            await GetNewerDocumentsFrom(client, lastTimestamp.Value, "expedition_transactions", ".ds-traces-apm-default-2024.11.14-000002");
+            await GetNewerDocumentsFrom(client, lastTimestamp.Value, "expedition_transactions",
+                ".ds-traces-apm-default-2024.11.14-000002");
         }
-        
+
         return 0;
     }
 
