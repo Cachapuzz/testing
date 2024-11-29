@@ -46,6 +46,12 @@ Access Portainer at [http://localhost:9000](http://localhost:9000).
 - username: `admin`
 - password: `superpassword`
 
+## Install Ansible
+
+```bash
+sudo apt install ansible -y
+```
+
 ## Run Ansible-Playbook
 
 ```bash
