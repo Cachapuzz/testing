@@ -221,15 +221,12 @@ public static class Handlers {
         if (int.TryParse(spanDropped, out var droppedValue)) parsedSpanDropped = droppedValue;
         else Console.WriteLine("Invalid number format for spanDropped.");
 
-        Console.WriteLine($"DateTime before conversion: {timestamp}");
-
         // Parse as DateTime
         if (!DateTime.TryParse(timestamp, out var parsedDateTime)) {
             Console.WriteLine("Error parsing");
         }
 
-        Console.WriteLine($"DateTime after conversion: {parsedDateTime}");
-
+        //If this document was captured after the application started, send transaction info to Prometheus
         if (isItNew) {
             var transactionPusher = new PrometheusPusher();
             await transactionPusher.PushSingleMetric("transaction_duration", transactionDuration, transactionId, transactionName);
@@ -453,19 +450,27 @@ public static class Handlers {
 
     public static async Task<object?> Start(ElasticsearchClient client) {
         
+        //Delete all documents in specified index
         //await DeleteAllDocuments(client, "expedition_transactions");
+        
+        //Delete index from elastic
         //await DeleteIndex(client, "expedition_transactions");
-
+        
+        // Create a new index if it doesn't exist
         await CreateIndex(client);
+        
+        //Copy documents from the index in the second argument from the index in the third argument
         await PopulateIndexFrom(client, "expedition_transactions", ".ds-traces-apm-default-2024.11.14-000002");
         
+        // Run a loop to periodically calculate system metrics
         _ = Task.Run(async () => {
             while (true) {
-                await ServerMetrics(client);
-                await Task.Delay(60000); // Run every minute
+                await SystemMetrics(client);
+                await Task.Delay(60000);
             }
         });
         
+        // Run a loop to periodically check for new documents and send new info to Prometheus
         while (true) {
             await Task.Delay(10000);
             var lastTimestamp = GetLastDocumentTime(client, "_timestamp", "expedition_transactions").Result;
@@ -568,7 +573,7 @@ public static class Handlers {
         }
     }
 
-    public static async Task ServerMetrics(ElasticsearchClient client) {
+    public static async Task SystemMetrics(ElasticsearchClient client) {
 
         var timeSpan = TimeSpan.FromMinutes(5);
         var size = 100;
