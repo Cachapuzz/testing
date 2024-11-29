@@ -49,5 +49,27 @@ Access Portainer at [http://localhost:9000](http://localhost:9000).
 ## Run Ansible-Playbook
 
 ```bash
-sudo ansible-playbook -i inventory.yml ansible-playbook.yml
+sudo ansible-playbook -i inventory.yml ansible-playbook.yml --ask-vault-pass
+```
+
+### Invetory.yml vault password
+
+```bash
+passwordmuitoforte
+```
+
+### .env vault password
+
+```bash
+passwordsupersegura
+```
+
+### Encrypt or Decrypt with Ansible-Vault
+
+```bash
+ansible-vault encrypt filename
+```
+
+```bash
+ansible-vault decrypt filename
 ```
