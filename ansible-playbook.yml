@@ -142,7 +142,7 @@
           msg: "Installed OpenSSL version: {{ openssl_version_output.stdout }}"
         tags: build
 
-        - name: Install required dependencies
+      - name: Install required dependencies
         apt:
           name: 
             - wget
