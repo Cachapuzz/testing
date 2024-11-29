@@ -6,18 +6,19 @@ namespace WebApplication1;
 
 public static class Handlers {
     
-    private static async Task CreateIndex(ElasticsearchClient client) {
+    // Function that creates a new index in ElasticSearch 
+    private static async Task CreateIndex(ElasticsearchClient client, string index) {
+        
         // Check if the index exists
-        var indexResponse = await client.Indices.ExistsAsync("expedition_transactions");
-
+        var indexResponse = await client.Indices.ExistsAsync(index);
         if (indexResponse.IsValidResponse) {
-            Console.WriteLine($"Index \"expedition_transactions\" already exists.");
+            Console.WriteLine($"Index \"{index}\" already exists.");
             return;
         }
 
         // Create the index if it doesn't exist
         try {
-            var createIndexResponse = await client.Indices.CreateAsync("expedition_transactions", c => c
+            var createIndexResponse = await client.Indices.CreateAsync(index, c => c
                 .Mappings(m => m
                     .Properties<object>(p => p
                         .Date("_timestamp")
@@ -102,9 +103,9 @@ public static class Handlers {
                 )
             );
             if (createIndexResponse.IsValidResponse) {
-                Console.WriteLine($"Index \"expedition_transactions\" created successfully!");
+                Console.WriteLine($"Index \"{index}\" created successfully!");
             }
-            else Console.WriteLine($"Error when trying to create \"expedition_transactions\"");
+            else Console.WriteLine($"Error when trying to create \"{index}\"");
         }
         catch (Exception ex) {
             Console.WriteLine($"An error occurred: {ex.Message}");
@@ -112,6 +113,7 @@ public static class Handlers {
         }
     }
 
+    // Receives incomplete string and tries removes problematic fields, returns json in string type
     private static string FixJson(string rawJson, string field) {
         string resultJson = rawJson;
 
@@ -146,10 +148,10 @@ public static class Handlers {
                 return resultJson;
             }
         }
-
         return resultJson;
     }
 
+    // Parses through a valid json string and returns the requested value in string type
     private static string SearchJsonField(string json, string field) {
         var jsonDocument = JsonDocument.Parse(json);
         var elements = field.Split('.');
@@ -168,31 +170,33 @@ public static class Handlers {
         return currentElement.ToString();
     }
 
-    public static T GetDocumentFromJson<T>(string jsonString) where T : class {
-        if (string.IsNullOrWhiteSpace(jsonString)) {
-            throw new ArgumentException("Input JSON string cannot be null or empty.");
-        }
-
+    // Deserializes a json string into an InputJson or OutputJson. Check "TransactionClasses.cs" for classes information
+    private static T GetDocumentFromJson<T>(string jsonString) where T : class {
+        
+        if (string.IsNullOrWhiteSpace(jsonString)) throw new ArgumentException("Input JSON string cannot be null or empty.");
+        
         try {
             // Deserialize the JSON string into a Document object
             T? document = System.Text.Json.JsonSerializer.Deserialize<T>(jsonString, new JsonSerializerOptions {
                 PropertyNameCaseInsensitive = true // Handle case-insensitivity for JSON keys
             });
 
-            if (document == null) {
-                throw new InvalidOperationException("Failed to deserialize JSON to Document.");
-            }
-
+            if (document == null) throw new InvalidOperationException("Failed to deserialize JSON to Document.");
+            
             return document;
         }
-        catch (System.Text.Json.JsonException ex) {
+        catch (JsonException ex) {
             Console.WriteLine($"Error parsing JSON: {ex.Message}");
             throw;
         }
     }
 
+    // Attaches input and output JSONs along additional information into a single ExpeditionTransaction and indexes it to elastic.
+    // Check "TransactionClasses.cs" for "ExpeditionTransaction" information
     private static async Task SendToElastic(string json, InputJson inputDocument, OutputJson outputDocument,
         ElasticsearchClient client, string newindex, bool isItNew) {
+        
+        // Values taken from original json. If this is changed, ExpeditionTransaction class has to change too
         var eventTime = SearchJsonField(json, "event.ingested");
         var hostName = SearchJsonField(json, "host.name");
         var spanId = SearchJsonField(json, "span.id");
@@ -204,7 +208,7 @@ public static class Handlers {
         var spanStarted = SearchJsonField(json, "transaction.span_count.started");
         var timestamp = SearchJsonField(json, "@timestamp");
 
-        //Parse non-string values to their respective types
+        //Parse non-string values into their respective types
         DateTime parsedEventTime = DateTime.MinValue;
         if (DateTime.TryParse(eventTime, out var parsedDate)) parsedEventTime = parsedDate;
         else Console.WriteLine("Invalid date format for eventTime.");
@@ -221,19 +225,20 @@ public static class Handlers {
         if (int.TryParse(spanDropped, out var droppedValue)) parsedSpanDropped = droppedValue;
         else Console.WriteLine("Invalid number format for spanDropped.");
 
-        // Parse as DateTime
+        // Parse as DateTime. If at any point it is changed to a string, you might lose milisecond information depending on DateTime type.
         if (!DateTime.TryParse(timestamp, out var parsedDateTime)) {
             Console.WriteLine("Error parsing");
         }
 
-        //If this document was captured after the application started, send transaction info to Prometheus
+        // If this document was captured after the application started, send transaction info to Prometheus
         if (isItNew) {
             var transactionPusher = new PrometheusPusher();
-            await transactionPusher.PushSingleMetric("transaction_duration", transactionDuration, transactionId, transactionName);
-            await transactionPusher.PushSingleMetric("transaction_span_started", spanStarted, transactionId, transactionName);
-            await transactionPusher.PushSingleMetric("transaction_span_dropped", spanDropped, transactionId, transactionName);
+            await transactionPusher.PushSingleMetric("transaction_duration", transactionDurationParsed, transactionId, transactionName);
+            await transactionPusher.PushSingleMetric("transaction_span_started", parsedSpanStarted, transactionId, transactionName);
+            await transactionPusher.PushSingleMetric("transaction_span_dropped", parsedSpanDropped, transactionId, transactionName);
         }
 
+        // Create new ExpeditionTransaction
         var transaction = new ExpeditionTransaction {
             _timestamp = parsedDateTime,
             Event = new EventInfo {
@@ -255,6 +260,7 @@ public static class Handlers {
             Response = outputDocument
         };
 
+        //Index ExpeditionTransaction in elastic
         try {
             var responseInsert = await client.IndexAsync<ExpeditionTransaction>(transaction, idx => idx
                 .Index(newindex));
@@ -268,7 +274,8 @@ public static class Handlers {
             Console.WriteLine($"Exception while indexing document: {ex.Message}");
         }
     }
-
+    
+    // Just a middle-point function to avoid repeated code, calls other functions that are explained above
     private static async Task TreatJsonAndIngest(ElasticsearchClient client, String json, String index, bool isItNew) {
         // Get the input/output JSONs
         var inputJson = SearchJsonField(json, "labels.inputJSON");
@@ -284,11 +291,18 @@ public static class Handlers {
 
         //Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(inputDocument));
         //Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(outputDocument));
+        
+        // Index jsons and more
         await SendToElastic(json, inputDocument, outputDocument, client, index, isItNew);
     }
 
+    // Copies all documents from the source index that aren't already in the new index
     private static async Task PopulateIndexFrom(ElasticsearchClient client, string newindex, string sourceindex) {
         try {
+            // Index ".ds-traces-apm-default-2024.11.14-000002" has documents that aren't from "ExpeditionService"
+            //      but only documents from it have "labels.inputJSON" and "labels.outputJSON" so we specify the service name
+            // We also specify that "labels.inputJSON" and "labels.outputJSON" must exist, just to be safe
+            
             var response = await client.SearchAsync<dynamic>(s => s
                 .Index(sourceindex)
                 .SearchType(SearchType.QueryThenFetch)
@@ -315,6 +329,7 @@ public static class Handlers {
                 return;
             }
 
+            // Get a set of all the documents that the new index already has
             var existingIdsResponse = await client.SearchAsync<dynamic>(s => s
                 .Index(newindex)
                 .Query(q => q
@@ -349,6 +364,7 @@ public static class Handlers {
                 }
 
                 ///// JSON /////
+                // Last argument is set to false because these documents weren't created at runtime (not used for Prometheus)
                 await TreatJsonAndIngest(client, json, newindex, false);
             }
         }
@@ -357,6 +373,7 @@ public static class Handlers {
         }
     }
 
+    // Returns a DateTime value of the most recent document in an index
     private static async Task<DateTime?> GetLastDocumentTime(ElasticsearchClient client, string dateField, string index) {
         var lastIndexedDocResponse = await client.SearchAsync<ExpeditionTransaction>(s => s
             .Index(index)
@@ -380,6 +397,7 @@ public static class Handlers {
         return lastTimestamp;
     }
 
+    // Deletes all documents in specified index (Be careful using this!)
     private static async Task DeleteAllDocuments(ElasticsearchClient client, string index) {
         var deleteResponse1 = await client.DeleteByQueryAsync<object>(index, d => d
             .Query(q => q
@@ -391,6 +409,7 @@ public static class Handlers {
         else Console.WriteLine($"Failed to delete documents: {deleteResponse1.ElasticsearchServerError?.Error.Reason}");
     }
 
+    // Deletes an index from elastic (I don't think this deletes the documents but they might get unorganized. Be careful using this!)
     private static async Task DeleteIndex(ElasticsearchClient client, string index) {
         var deleteResponse2 = await client.Indices.DeleteAsync(index);
         if (deleteResponse2.IsValidResponse) Console.WriteLine($"Successfully deleted index expedition_transactions.");
@@ -399,9 +418,9 @@ public static class Handlers {
                 $"Failed to delete index expedition_transactions: {deleteResponse2.ElasticsearchServerError?.Error.Reason}");
     }
 
+    // Copies all documents from the source index that have a more recent timestamp than the newest document from the new index
     private static async Task GetNewerDocumentsFrom(ElasticsearchClient client, DateTime lastTimestamp, string newindex,
         string sourceindex) {
-        var formattedLastTimestamp = lastTimestamp.ToUniversalTime().ToString("o");
         var searchResponse = await client.SearchAsync<dynamic>(s => s
             .Index(sourceindex)
             .Query(q => q
@@ -437,17 +456,19 @@ public static class Handlers {
             return;
         }
 
-
+        // For each document
         foreach (var hit in searchResponse.Hits) {
             var json = hit.Source?.ToString();
             if (json == null) {
                 continue;
             }
 
+            // Last argument is set to true because these documents were created during runtime (used for Prometheus)
             TreatJsonAndIngest(client, json, newindex, true);
         }
     }
 
+    // Starting point of the App
     public static async Task<object?> Start(ElasticsearchClient client) {
         
         //Delete all documents in specified index
@@ -457,7 +478,7 @@ public static class Handlers {
         //await DeleteIndex(client, "expedition_transactions");
         
         // Create a new index if it doesn't exist
-        await CreateIndex(client);
+        await CreateIndex(client, "expedition_transactions");
         
         //Copy documents from the index in the second argument from the index in the third argument
         await PopulateIndexFrom(client, "expedition_transactions", ".ds-traces-apm-default-2024.11.14-000002");
@@ -482,6 +503,10 @@ public static class Handlers {
         return 0;
     }
 
+    // Searches for a specific metric in elastic's metrics-* indexes and calculates it's value depending on specifics
+    // available modes : "sum&count", "average", "max", "sum"
+    // timeWindow: Searches all documents since "timeWindow" ago. (can be minutes, hours, days, etc)
+    // size: restricts number of documents received (the most recent are captured)
     private static async Task<object?> GetMetrics(string field, int size, TimeSpan timeWindow, string mode,
         ElasticsearchClient client) {
         try {
@@ -573,8 +598,10 @@ public static class Handlers {
         }
     }
 
+    // Calculates a few metrics with elastic information and pushes to prometheus pushgateway
     public static async Task SystemMetrics(ElasticsearchClient client) {
 
+        // Get the most recent 100 documents that were indexed in the last 5 minutes
         var timeSpan = TimeSpan.FromMinutes(5);
         var size = 100;
 
@@ -586,7 +613,6 @@ public static class Handlers {
             Console.WriteLine($"CPU Total Normal Percentage: {Math.Round(cU, 2)}");
             metricDocument.CpuUsage = cU;
         }
-
 
         ////////// NORMALIZED LOAD //////////
         var load1 = await GetMetrics("system.load.1", size, timeSpan, "average",client);
@@ -682,7 +708,7 @@ public static class Handlers {
 
         ////////// DISK READ THROUGHPUT ////////// (Not sure how to get this yet. Not a priority right now)
 
-        ////////// DISK USAGE - AVAILABLE (%) //////////
+        ////////// DISK USAGE - AVAILABLE (%) ////////// (Don't think this is working)
         var diskUsage = GetMetrics("system.filesystem.used.pct", size, timeSpan, "average", client).Result;
         if (diskUsage is double dU) {
             var diskAvailable = 1 - dU;
@@ -690,13 +716,14 @@ public static class Handlers {
             metricDocument.DiskUsageAvailable = diskAvailable;
         }
 
-        ////////// DISK USAGE - MAX (%) //////////
+        ////////// DISK USAGE - MAX (%) ////////// (Don't think this is working)
         var maxDisk = await GetMetrics("system.filesystem.used.pct", size, timeSpan, "max", client);
         if (maxDisk is double mD) {
             Console.WriteLine($"DISK USAGE - MAX (%): {Math.Round(mD, 2)}");
             metricDocument.DiskUsageMax = mD;
         }
         
+        // Push to prometheus pushgateway
         var performancePusher = new PrometheusPusher();
         await performancePusher.PushMetrics(metricDocument);
 

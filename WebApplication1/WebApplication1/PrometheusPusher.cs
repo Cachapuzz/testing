@@ -7,7 +7,8 @@ namespace WebApplication1;
 public class PrometheusPusher {
     private const string PushgatewayUrl = "http://192.168.2.16:9091/metrics/job/cpu_metrics";
 
-    public async Task PushSingleMetric(string metricName, string value, string transactionId, string transactionName) {
+    // Tries to push one metric at a time
+    public async Task PushSingleMetric(string metricName, int? value, string transactionId, string transactionName) {
         var client = new RestClient(PushgatewayUrl);
         var request = new RestRequest(PushgatewayUrl) {
             Method = Method.Put
@@ -28,6 +29,7 @@ public class PrometheusPusher {
         }
     }
     
+    // Pushes system metrics from a "MetricDocument" instance
     public async Task PushMetrics(MetricDocument metric) {
         var client = new RestClient(PushgatewayUrl);
         var request = new RestRequest(PushgatewayUrl) {
