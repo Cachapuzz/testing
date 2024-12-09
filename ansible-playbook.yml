@@ -194,34 +194,6 @@
         tags: 
           - .net
   
-      - name: Navigate to the .NET application directory and run commands
-        ansible.builtin.shell: |
-          cd /home/{{ ansible_user }}/Desktop/testing/WebApplication1/
-          dotnet restore
-          dotnet build --configuration Release
-          nohup dotnet run > app.log 2>&1 &
-        environment:
-          DOTNET_ENVIRONMENT: Production
-        tags:
-          - .net
-          - .netup
-  
-      - name: Confirm the application is running
-        shell: pgrep -f dotnet
-        register: dotnet_pid
-        failed_when: dotnet_pid.stdout == ""
-        changed_when: false
-        tags:
-          - .net
-          - .netup
-  
-      - name: Show the application process ID
-        debug:
-          msg: "Application is running with PID: {{ dotnet_pid.stdout }}"
-        tags:
-          - .net
-          - .netup
-  
       - name: Create Docker keyrings directory
         file:
           path: /etc/apt/keyrings
@@ -490,7 +462,35 @@
       - name: Display result
         debug:
           msg: "{{ reset_password_result.stdout }}"
-        tags: passwordreset
+        tags: passwordreset~
+
+      - name: Navigate to the .NET application directory and run commands
+        ansible.builtin.shell: |
+          cd /home/{{ ansible_user }}/Desktop/testing/WebApplication1/
+          dotnet restore
+          dotnet build --configuration Release
+          nohup dotnet run > app.log 2>&1 &
+        environment:
+          DOTNET_ENVIRONMENT: Production
+        tags:
+          - .net
+          - .netup
+  
+      - name: Confirm the application is running
+        shell: pgrep -f dotnet
+        register: dotnet_pid
+        failed_when: dotnet_pid.stdout == ""
+        changed_when: false
+        tags:
+          - .net
+          - .netup
+  
+      - name: Show the application process ID
+        debug:
+          msg: "Application is running with PID: {{ dotnet_pid.stdout }}"
+        tags:
+          - .net
+          - .netup
  
       #- name: Copy certificates from ELK container
         #shell: |
