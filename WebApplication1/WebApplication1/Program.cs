@@ -11,9 +11,12 @@ class Program {
             Console.WriteLine("No Elasticsearch service found");
             return;
         }
-
-        await Handlers.Start(elasticsearchService.Client);
-
-        Console.WriteLine("Operation completed successfully.");
+        Console.WriteLine("Starting Application.");
+        
+        var cts = new CancellationTokenSource();
+        await Handlers.Start(elasticsearchService.Client, cts.Token);
+        await cts.CancelAsync();
+        
+        Console.WriteLine("Application finished.");
     }
 }
